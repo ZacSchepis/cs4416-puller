@@ -2,7 +2,12 @@ import requests
 import pandas as pd
 import numpy as np
 import json
+import argparse 
 
+parser = argparse.ArgumentParser(
+  prog="commit-puller",
+  description="Pulls commits froma  repo",
+)
 # https://github.com/NAIST-SE/DevGPT/raw/refs/heads/main/snapshot_20230727/20230727_200003_commit_sharings.json
 repo = "https://github.com/NAIST-SE/DevGPT/raw/refs/heads/main/"
 urls = [
@@ -18,7 +23,26 @@ urls = [
 ]
 # url = "https://github.com/NAIST-SE/DevGPT/raw/refs/heads/main/snapshot_20230727/20230727_200003_commit_sharings.json"
 # url = repo + urls[i]
-def git_pull_data():
+statiscalls = {
+  "user":0,
+  "crespone": 0,
+  "overlimit": 0,
+  "count": 0,
+}
+def statics(usize, csize):
+  modified = 0
+  if(usize > 5000):
+    statiscalls["user"] += 1
+    modified += 1
+  if(csize > 5000):
+    statiscalls["crespone"] += 1
+    modified += 1
+  if(modified > 0):
+    statiscalls["overlimit"] += modified
+  statiscalls["count"] += 1
+
+
+def git_pull_data(stats):
   """
     schepis, hill, bliven/webb
      - This function coallesces git commit data from the above git repo into a format ready for use
@@ -39,12 +63,33 @@ def git_pull_data():
                 "Prompt": con["Prompt"],
                 "Answer": con["Answer"]
             }
+            if stats:
+              statics(len(row.get("Prompt", 0)), len(row.get("Answer", 0)))
             convrow.append(row)
         if len(convrow) > 0:
           commit_messages["Conversation"] = convrow
         rows.append(commit_messages)
   return rows
 
+def analyze(basis, over, total, title):
+  try:
+
+    base_ = basis / over if over > 0 else 0
+    overall = basis / total if total > 0 else 0
+    print(f'% {title}: {base_*100}')
+    print(f'% overall: {overall*100}')
+  except ZeroDivisionError as e:
+    print("Zero, but that is okay", str(e))
+
+
 
 if __name__ == "__main__":
-  commits = git_pull_data()
+  parser.add_argument('--stats', action="store_true", help='toggle stat collection')
+  args = parser.parse_args()
+  should_do = args.stats or False
+  commits = git_pull_data(should_do)
+  if should_do:
+    print(statiscalls)
+    usercount, answercount, overcount, total_ = [statiscalls["user"], statiscalls["crespone"], statiscalls["overlimit"], statiscalls["count"]]
+    analyze(usercount, overcount, total_, "User messages over limit")
+    analyze(answercount, overcount, total_, "ChatGPT answer response over limit")
